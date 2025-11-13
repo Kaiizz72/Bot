@@ -4,7 +4,7 @@
 const mineflayer = require('mineflayer')
 
 // ================== CONFIG ==================
-const SERVER_HOST = process.env.SERVER_HOST || 'basic.asaka.asia'
+const SERVER_HOST = process.env.SERVER_HOST || 'Basic.asaka.asia'
 const SERVER_PORT = Number(process.env.SERVER_PORT || 25172)
 const AUTH_MODE   = process.env.AUTH_MODE || 'offline'
 // Nếu cần version cụ thể, thêm: version: '1.20.4'
