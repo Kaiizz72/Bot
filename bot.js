@@ -29,7 +29,7 @@ function createBot (name) {
     host: SERVER_HOST,
     port: SERVER_PORT,
     username: name,
-    auth: AUTH_MODE
+    auth: AUTH_MODE,
     version: '1.20.4'
   })
 
