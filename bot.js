@@ -30,6 +30,7 @@ function createBot (name) {
     port: SERVER_PORT,
     username: name,
     auth: AUTH_MODE
+    version: '1.20.4'
   })
 
   // Trạng thái cho từng bot
