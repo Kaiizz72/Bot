@@ -1,13 +1,12 @@
-// bot.js — 5 bots auto /register -> /login -> /server ffa
-// Tự reconnect nếu bị kick / disconnect (ở mãi không rời khỏi)
+// bot.js — 5 bot auto /register -> /login -> /server ffa
+// Mỗi lần connect/reconnect đều /register & /login lại cho chắc
 
 const mineflayer = require('mineflayer')
 
 // ================== CONFIG ==================
-const SERVER_HOST = process.env.SERVER_HOST || 'Basic.asaka.asia'
-const SERVER_PORT = Number(process.env.SERVER_PORT || 25172)
-const AUTH_MODE   = process.env.AUTH_MODE || 'offline'
-// Nếu cần version cụ thể, thêm: version: '1.20.4'
+const SERVER_HOST = 'basic.asaka.asia' // host server Java
+const SERVER_PORT = 25172                     // port Java
+const AUTH_MODE   = 'offline'                 // offline / microsoft
 
 const PASSWORD         = '11qqaa22wwss'
 const TARGET_SUBSERVER = 'ffa'
@@ -20,110 +19,107 @@ const BOT_NAMES = [
   'MeMayJa'
 ]
 
-const JOIN_DELAY_MS = 2500
-const RECONNECT_DELAY_MS = 5000
+const JOIN_DELAY_MS       = 8000   // 8s giữa mỗi bot join
+const BASE_RECONNECT_MS   = 30000  // 30s
+const TOO_FAST_RECONNECT  = 60000  // 60s nếu bị "too fast"
+const MC_VERSION          = '1.20.4' // chỉnh đúng version Java sv
 // ===========================================
 
-function createBot (name) {
-  const bot = mineflayer.createBot({
-    host: SERVER_HOST,
-    port: SERVER_PORT,
-    username: name,
-    auth: AUTH_MODE,
-    version: '1.20.4'
-  })
+function startBotForever (name) {
+  function connect () {
+    console.log(`[${name}] Đang kết nối tới ${SERVER_HOST}:${SERVER_PORT}...`)
 
-  // Trạng thái cho từng bot
-  let registered = false
-  let loggedIn   = false
-  let joinedFFA  = false
-  let reconnecting = false
+    const bot = mineflayer.createBot({
+      host: SERVER_HOST,
+      port: SERVER_PORT,
+      username: name,
+      auth: AUTH_MODE,
+      version: MC_VERSION
+    })
 
-  function scheduleReconnect(reason) {
-    if (reconnecting) return
-    reconnecting = true
-    console.log(`[${name}] Disconnected (${reason}). Reconnecting in ${RECONNECT_DELAY_MS / 1000}s...`)
-    setTimeout(() => {
-      createBot(name)
-    }, RECONNECT_DELAY_MS)
+    let joinedFFA = false
+
+    function scheduleReconnect (reason) {
+      let reasonStr
+      try {
+        reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason)
+      } catch {
+        reasonStr = String(reason)
+      }
+
+      const lower = reasonStr.toLowerCase()
+      let delay = BASE_RECONNECT_MS
+
+      if (lower.includes('too fast')) {
+        delay = TOO_FAST_RECONNECT
+      }
+
+      delay += Math.floor(Math.random() * 10000) // + random 0–10s
+
+      console.log(
+        `[${name}] Sẽ reconnect trong ${Math.round(delay / 1000)}s (reason: ${reasonStr})`
+      )
+      setTimeout(connect, delay)
+    }
+
+    bot.once('spawn', () => {
+      console.log(`[${name}] Đã vào server (spawn)`)
+
+      // 1) LUÔN /register lại
+      setTimeout(() => {
+        bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
+        console.log(`[${name}] /register ${PASSWORD} ${PASSWORD}`)
+      }, 2000)
+
+      // 2) LUÔN /login lại
+      setTimeout(() => {
+        bot.chat(`/login ${PASSWORD}`)
+        console.log(`[${name}] /login ${PASSWORD}`)
+      }, 5000)
+
+      // 3) Sau đó vào /server ffa
+      setTimeout(() => {
+        bot.chat(`/server ${TARGET_SUBSERVER}`)
+        joinedFFA = true
+        console.log(`[${name}] /server ${TARGET_SUBSERVER}`)
+      }, 9000)
+    })
+
+    // Bắt message chỉ để hỗ trợ vụ FFA (không đụng tới /register, /login nữa)
+    bot.on('message', (jsonMsg) => {
+      const msg = jsonMsg.toString().toLowerCase()
+      // console.log(`[${name}] <SV> ${msg}`)
+
+      if (!joinedFFA && msg.includes('ffa')) {
+        bot.chat(`/server ${TARGET_SUBSERVER}`)
+        joinedFFA = true
+        console.log(`[${name}] auto /server ${TARGET_SUBSERVER} từ chat`)
+      }
+    })
+
+    bot.on('kicked', (reason) => {
+      console.log(`[${name}] Kicked:`, reason)
+      scheduleReconnect(reason)
+    })
+
+    bot.on('end', () => {
+      console.log(`[${name}] Kết nối kết thúc (end).`)
+      scheduleReconnect('end')
+    })
+
+    bot.on('error', (err) => {
+      console.log(`[${name}] Error:`, err)
+    })
   }
 
-  bot.once('spawn', () => {
-    console.log(`[${name}] Spawned vào hub / lobby`)
-
-    // Force lệnh cho chắc ăn, phòng khi server không gửi chat hướng dẫn
-    setTimeout(() => {
-      if (!registered) {
-        bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
-        console.log(`[${name}] (force) /register`)
-      }
-    }, 2000)
-
-    setTimeout(() => {
-      if (!loggedIn) {
-        bot.chat(`/login ${PASSWORD}`)
-        console.log(`[${name}] (force) /login`)
-      }
-    }, 5000)
-
-    setTimeout(() => {
-      if (!joinedFFA) {
-        bot.chat(`/server ${TARGET_SUBSERVER}`)
-        console.log(`[${name}] (force) /server ${TARGET_SUBSERVER}`)
-      }
-    }, 9000)
-  })
-
-  // BẮT CHAT SERVER
-  bot.on('message', (jsonMsg) => {
-    const msg = jsonMsg.toString().toLowerCase()
-    // console.log(`[${name}] <SERVER> ${msg}`)
-
-    // Các text tuỳ plugin login của sv bạn, cần thì chỉnh lại contains(...)
-    if (!registered && msg.includes('/register')) {
-      bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
-      registered = true
-      console.log(`[${name}] auto /register từ chat`)
-    }
-
-    if (!loggedIn && msg.includes('/login')) {
-      bot.chat(`/login ${PASSWORD}`)
-      loggedIn = true
-      console.log(`[${name}] auto /login từ chat`)
-    }
-
-    // Khi đã login, thấy ffa → /server ffa
-    if (!joinedFFA && loggedIn && msg.includes('ffa')) {
-      bot.chat(`/server ${TARGET_SUBSERVER}`)
-      joinedFFA = true
-      console.log(`[${name}] auto /server ${TARGET_SUBSERVER} từ chat`)
-    }
-  })
-
-  // Nếu bị kick, log + reconnect
-  bot.on('kicked', (reason) => {
-    console.log(`[${name}] Kicked:`, reason)
-    scheduleReconnect('kicked')
-  })
-
-  // Nếu mất kết nối (server down / timeout / vv.) cũng reconnect
-  bot.on('end', () => {
-    scheduleReconnect('end')
-  })
-
-  bot.on('error', (err) => {
-    console.log(`[${name}] Error:`, err)
-  })
-
-  return bot
+  connect()
 }
 
-// Tạo 5 bot lần lượt, cách nhau 2.5s
+// Tạo 5 bot lần lượt
 ;(async () => {
-  for (let i = 0; i < BOT_NAMES.length; i++) {
-    const name = BOT_NAMES[i]
+  for (const name of BOT_NAMES) {
     console.log(`Đang tạo bot: ${name}`)
-    createBot(name)
+    startBotForever(name)
     await new Promise(res => setTimeout(res, JOIN_DELAY_MS))
   }
 })()
