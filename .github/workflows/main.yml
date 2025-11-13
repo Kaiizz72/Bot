@@ -1,0 +1,30 @@
+name: Mineflayer FFA Bots
+
+on:
+  workflow_dispatch:    # Cho phép bấm "Run workflow" bằng tay
+  # push:               # Nếu muốn mỗi lần push là auto chạy thì mở ra
+  #   branches: [ main ]
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Start mineflayer bots
+        run: node bot.js
+        env:
+          SERVER_HOST: basic.asaka.asia
+          SERVER_PORT: 25172
+          AUTH_MODE: offline
+          
